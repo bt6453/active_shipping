@@ -16,7 +16,8 @@ module ActiveShipping
       :track => 'ups.app/xml/Track',
       :ship_confirm => 'ups.app/xml/ShipConfirm',
       :ship_accept => 'ups.app/xml/ShipAccept',
-      :delivery_dates =>  'ups.app/xml/TimeInTransit'
+      :delivery_dates =>  'ups.app/xml/TimeInTransit',
+      :void => 'ups.app/xml/Void'
     }
 
     PICKUP_CODES = HashWithIndifferentAccess.new(
@@ -189,6 +190,21 @@ module ActiveShipping
       dates_request = build_delivery_dates_request(origin, destination, packages, pickup_date, options)
       response = commit(:delivery_dates, save_request(access_request + dates_request), (options[:test] || false))
       parse_delivery_dates_response(origin, destination, packages, response, options)
+    end
+
+    def void_shipping_labels(identification_number, tracking_numbers=[], options={})
+      options = @options.merge(options)
+      tracking_numbers = Array(tracking_numbers)
+      begin
+        # Build the Void Label Request.
+        access_request = "<?xml version='1.0' ?>" + build_access_request
+        void_request = "<?xml version='1.0' encoding='UTF-8' ?>" + build_void_label_request(identification_number, tracking_numbers, options)
+        response = commit(:void, save_request(access_request + void_request), (options[:test] || false))
+        # Parse the void response
+        parse_void_response(response, options)
+      rescue RuntimeError => e
+        raise "Could not void shipping label. #{e.message}"
+      end
     end
 
     protected
@@ -497,6 +513,34 @@ module ActiveShipping
           end
         end
       end
+    end
+
+    def build_void_label_request(identification_number, tracking_numbers = [], options = {})
+      xml_request = XmlNode.new('VoidShipmentRequest') do |void_request|
+        # Required element.
+        void_request << XmlNode.new('Request') do |request|
+          request << XmlNode.new('RequestAction', 'Void')
+          # Optional.
+          if options[:customer_context]
+            request << XmlNode.new('TransactionReference') do |refer|
+              refer << XmlNode.new('CustomerContext', options[:customer_context])
+            end
+          end
+        end
+
+        # Required element. The shipment id number and any additional tracking numbers if they exist.
+        if tracking_numbers.blank?
+          void_request << XmlNode.new('ShipmentIdentificationNumber', identification_number)
+        else
+          void_request << XmlNode.new('ExpandedVoidShipment') do |expanded_void_shipment|
+            expanded_void_shipment << XmlNode.new('ShipmentIdentificationNumber', identification_number)
+            tracking_numbers.each do |tracking_number|
+              expanded_void_shipment << XmlNode.new('TrackingNumber', tracking_number)
+            end
+          end
+        end
+      end
+      xml_request.to_s
     end
 
     def build_accept_request(digest, options = {})
@@ -844,6 +888,42 @@ module ActiveShipping
       message = response_message(xml)
 
       LabelResponse.new(success, message, Hash.from_xml(response).values.first)
+    end
+
+    def parse_void_response(response, options={})
+      xml = REXML::Document.new(response)
+      success = response_success?(xml)
+      message = response_message(xml)
+      @package_level_results = []
+
+      if success
+        xml.elements.each('/*/PackageLevelResults') do |package_level_result|
+          tracking_number = package_level_result.get_text('TrackingNumber').to_s
+          status_code = package_level_result.get_text('StatusCode').to_s.to_f
+          description = package_level_result.get_text('Description').to_s
+          @package_level_results << VoidResult.new(tracking_number, status_code, description)
+        end
+        status_node = xml.elements['VoidShipmentResponse/Status']
+        status_type = status_node.get_text('StatusType/Code').to_s
+        status_code = status_node.get_text('StatusCode/Code').to_s
+      else
+        # Sets the option to allow for errors to be passed/handled in app.
+        success = options[:display_errors]
+        # Sets the error codes
+        status_node = xml.elements['VoidShipmentResponse/Response']
+        status_type = status_node.get_text('Error/ErrorSeverity').to_s
+        status_code = status_node.get_text('Error/ErrorCode').to_s
+      end
+        
+      VoidResponse.new(success, message, Hash.from_xml(response).values.first,
+        {
+          :xml => response,
+          :request => last_request,
+          :package_level_results => @package_level_results,
+          :status_type => status_type,
+          :status_code => status_code 
+        }
+      )
     end
 
     def commit(action, request, test = false)
