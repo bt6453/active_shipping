@@ -756,15 +756,20 @@ module ActiveShipping
         end
 
         activities = first_package.css('> Activity')
+        ship_time = nil
         unless activities.empty?
           shipment_events = activities.map do |activity|
             description = activity.at('Status/StatusType/Description').text
             zoneless_time = parse_ups_datetime(:time => activity.at('Time'), :date => activity.at('Date'))
             location = location_from_address_node(activity.at('ActivityLocation/Address'))
-            ShipmentEvent.new(description, zoneless_time, location)
+            type_code = TRACKING_STATUS_CODES[activity.at('Status/StatusType/Code').text]
+            ShipmentEvent.new(description, zoneless_time, location, nil, type_code)
           end
 
           shipment_events = shipment_events.sort_by(&:time)
+
+          # Get the shipment time
+          ship_time = shipment_events.find { |event| event.type_code == :in_transit || event.type_code == :pickup }.try(&:time)
 
           # UPS will sometimes archive a shipment, stripping all shipment activity except for the delivery
           # event (see test/fixtures/xml/delivered_shipment_without_events_tracking_response.xml for an example).
@@ -811,7 +816,8 @@ module ActiveShipping
                            :exception_event => exception_event,
                            :origin => origin,
                            :destination => destination,
-                           :tracking_number => tracking_number)
+                           :tracking_number => tracking_number,
+                           :ship_time => ship_time)
     end
 
     def parse_delivery_dates_response(origin, destination, packages, response, options={})
