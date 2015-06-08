@@ -769,7 +769,7 @@ module ActiveShipping
           shipment_events = shipment_events.sort_by(&:time)
 
           # Get the shipment time
-          ship_time = shipment_events.find { |event| event.type_code == :in_transit || event.type_code == :pickup }.try(&:time)
+          ship_time = shipment_events.find { |event| event.type_code == :in_transit || event.type_code == :pickup }.try(:time)
 
           # UPS will sometimes archive a shipment, stripping all shipment activity except for the delivery
           # event (see test/fixtures/xml/delivered_shipment_without_events_tracking_response.xml for an example).

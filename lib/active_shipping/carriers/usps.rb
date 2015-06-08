@@ -568,6 +568,11 @@ module ActiveShipping
 
         shipment_events = shipment_events.sort_by(&:time)
 
+        # 03 - Pickup by carrier
+        # 80 - Pickup by shipping partner
+        # See https://about.usps.com/publications/pub97/pub97_i.htm
+        ship_time = shipment_events.find { |event| ["03", "80"].include?(event.type_code) }.try(:time)
+
         if last_shipment = shipment_events.last
           status = last_shipment.status
           actual_delivery_date = last_shipment.time if last_shipment.delivered?
@@ -583,7 +588,8 @@ module ActiveShipping
                            :tracking_number => tracking_number,
                            :status => status,
                            :actual_delivery_date => actual_delivery_date,
-                           :scheduled_delivery_date => scheduled_delivery
+                           :scheduled_delivery_date => scheduled_delivery,
+                           :ship_time => ship_time
       )
     end
 
