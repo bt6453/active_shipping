@@ -70,8 +70,10 @@ module ActiveShipping
 
     CANADA_ORIGIN_SERVICES = {
       "01" => "UPS Express",
-      "02" => "UPS Expedited",
-      "14" => "UPS Express Early A.M."
+      "08" => "UPS Expedited",
+      "11" => "UPS Standard",
+      "14" => "UPS Express Early A.M.",
+      "65" => "UPS Express Saver"
     }
 
     MEXICO_ORIGIN_SERVICES = {
