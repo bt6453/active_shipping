@@ -320,7 +320,7 @@ module ActiveShipping
             package.options[:reference_numbers] = options[:reference_numbers]
           end
         end
-        options[:reference_numbers] = []
+        #options[:reference_numbers] = []
       end
 
       handle_delivery_confirmation_options(origin, destination, packages, options)
