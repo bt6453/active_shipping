@@ -319,8 +319,8 @@ module ActiveShipping
           packages.each do |package|
             package.options[:reference_numbers] = options[:reference_numbers]
           end
+          options[:reference_numbers] = []
         end
-        #options[:reference_numbers] = []
       end
 
       handle_delivery_confirmation_options(origin, destination, packages, options)
